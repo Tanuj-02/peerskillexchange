@@ -5,9 +5,11 @@ import com.tanuj.peerskillexchange.dto.auth.LoginResponse;
 import com.tanuj.peerskillexchange.dto.auth.RegisterRequest;
 import com.tanuj.peerskillexchange.dto.auth.RegisterResponse;
 import com.tanuj.peerskillexchange.service.AuthService;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -26,5 +28,15 @@ public class AuthController {
     @PostMapping("/register")
     public RegisterResponse register(@RequestBody RegisterRequest registerRequest){
         return authService.register(registerRequest);
+    }
+
+    @GetMapping("/verify-email")
+    public String verifyEmail(@RequestParam String email, @RequestParam String code) {
+        return authService.verifyEmail(email, code);
+    }
+
+    @PostMapping("/resend-verification")
+    public String resendVerification(@RequestParam String email) {
+        return authService.resendEmailVerification(email);
     }
 }

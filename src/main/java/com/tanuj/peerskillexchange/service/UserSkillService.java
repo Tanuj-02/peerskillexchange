@@ -10,7 +10,10 @@ import com.tanuj.peerskillexchange.repository.UserSkillRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class UserSkillService {
@@ -25,11 +28,15 @@ public class UserSkillService {
         this.userSkillRepository = userSkillRepository;
     }
 
-    private void addSkillList(User user, List<String> skillNames, SkillType type) {
+    private static String normalizeSkillName(String skillName) {
+        if (skillName == null) return null;
+        String normalized = skillName.trim().toLowerCase(Locale.ROOT);
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private void addSkillList(User user, Set<String> skillNames, SkillType type) {
 
         for (String skillName : skillNames) {
-
-            skillName = skillName.trim().toLowerCase();
 
             Skill skill = skillRepository
                     .findBySkillnameIgnoreCase(skillName)
@@ -41,30 +48,20 @@ public class UserSkillService {
                 skill = skillRepository.save(skill);
             }
 
-            boolean exists = false;
-
-//            for (UserSkill us : user.getUserSkills()) {
-//                if (us.getSkill().getId() == skill.getId()
-//                        && us.getType() == type) {
-//                    exists = true;
-//                    break;
-//                }
-//            }
-
             for (UserSkill us : user.getUserSkills()) {
                 if (us.getSkill().getId() == skill.getId()) {
-                    throw new RuntimeException("Skill already added in another category: " + skillName);
+                    if (us.getType() != type) {
+                        throw new IllegalArgumentException("Skill cannot be in both canTeach and wantsToLearn: " + skillName);
+                    }
                 }
             }
 
-            if (!exists) {
-                UserSkill userSkill = new UserSkill();
-                userSkill.setUsers(user);
-                userSkill.setSkill(skill);
-                userSkill.setType(type);
+            UserSkill userSkill = new UserSkill();
+            userSkill.setUsers(user);
+            userSkill.setSkill(skill);
+            userSkill.setType(type);
 
-                user.getUserSkills().add(userSkill);
-            }
+            user.getUserSkills().add(userSkill);
         }
     }
     @Transactional
@@ -72,15 +69,35 @@ public class UserSkillService {
 
         User user = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
 
-        userSkillRepository.deleteByUsers(user);
-        user.getUserSkills().clear();
-        if(canTeach != null){
-            addSkillList(user,canTeach,SkillType.TEACH);
+        Set<String> canTeachSet = new HashSet<>();
+        if (canTeach != null) {
+            for (String s : canTeach) {
+                String n = normalizeSkillName(s);
+                if (n != null) canTeachSet.add(n);
+            }
         }
 
-        if(wantsToLearn != null){
-            addSkillList(user,wantsToLearn,SkillType.LEARN);
+        Set<String> wantsToLearnSet = new HashSet<>();
+        if (wantsToLearn != null) {
+            for (String s : wantsToLearn) {
+                String n = normalizeSkillName(s);
+                if (n != null) wantsToLearnSet.add(n);
+            }
         }
+
+        if (!canTeachSet.isEmpty() && !wantsToLearnSet.isEmpty()) {
+            Set<String> overlap = new HashSet<>(canTeachSet);
+            overlap.retainAll(wantsToLearnSet);
+            if (!overlap.isEmpty()) {
+                throw new IllegalArgumentException("Same skill cannot be in both canTeach and wantsToLearn: " + overlap);
+            }
+        }
+
+        userSkillRepository.deleteByUsers(user);
+        user.getUserSkills().clear();
+        addSkillList(user, canTeachSet, SkillType.TEACH);
+
+        addSkillList(user, wantsToLearnSet, SkillType.LEARN);
 
         userRepository.save(user);
 

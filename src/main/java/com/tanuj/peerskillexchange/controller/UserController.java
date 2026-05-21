@@ -3,8 +3,13 @@ package com.tanuj.peerskillexchange.controller;
 import com.tanuj.peerskillexchange.dto.user.UserRequest;
 import com.tanuj.peerskillexchange.dto.user.UserResponse;
 import com.tanuj.peerskillexchange.service.UserService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/users")
@@ -27,14 +32,54 @@ public class UserController {
     }
 
     @PutMapping("/me/update")
-    public UserResponse updateUser( @RequestBody UserRequest userRequest) {
-        return userService.updateUser(userRequest);
+    public UserResponse updateUser(@RequestBody UserRequest userRequest) {
+        try {
+            return userService.updateUser(userRequest);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    @PostMapping("/me/update")
+    public UserResponse updateUserPost(@RequestBody UserRequest userRequest) {
+        try {
+            return userService.updateUser(userRequest);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
 
     @PutMapping("/me/password")
-    public String updatePassword(@RequestParam String oldPassword, @RequestParam String newPassword) {
+    public String updatePassword(
+            @RequestParam String oldPassword,
+            @RequestParam String newPassword,
+            @RequestParam String verificationCode
+    ) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        userService.updatePassword(username, oldPassword, newPassword);
+        userService.updatePassword(username, oldPassword, newPassword, verificationCode);
         return "Password updated successfully";
+    }
+
+    @PostMapping("/me/password/send-verification")
+    public String sendPasswordVerification() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        userService.sendPasswordChangeVerificationCode(username);
+        return "Verification code sent to your email";
+    }
+
+    @GetMapping("/search")
+    public Page<UserResponse> searchUsers(
+            @RequestParam(defaultValue = "") String q,
+            @RequestParam(required = false) String skill,
+            @RequestParam(defaultValue = "BOTH") String type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50));
+        try {
+            return userService.searchUsers(q, skill, type, pageable);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
 }

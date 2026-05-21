@@ -1,6 +1,7 @@
 package com.tanuj.peerskillexchange.security;
 
 import com.tanuj.peerskillexchange.security.jwt.jwtFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -45,16 +46,20 @@ public class SecurityConfig {
                                         "/swagger-ui/**",
                                         "/v3/api-docs/**",
                                         "/doc",
-                                        "/error"
+                                        "/error",
+                                        "/ws/**",
+                                        "/ws"
                                 ).permitAll()
 
-                                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/users").hasAnyAuthority("ADMIN", "ROLE_ADMIN")
+                                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/users").hasAnyAuthority("ADMIN", "ROLE_ADMIN", "USER", "ROLE_USER")
                                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/skills").hasAnyAuthority("ADMIN", "ROLE_ADMIN")
 
                                 .requestMatchers(
                                         "/api/requests/**",
                                         "/api/users",
                                         "/api/users/**",
+                                        "/api/discover",
+                                        "/api/discover/**",
                                         "/api/analytics/**"
                                 ).hasAnyAuthority("USER", "ROLE_USER", "ADMIN", "ROLE_ADMIN")
 
@@ -82,11 +87,13 @@ public class SecurityConfig {
         return configuration.getAuthenticationManager();
     }
 
+    @Value("${FRONTEND_URL}")
+    private String frontendUrl;
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:3000"));
+        configuration.setAllowedOrigins(List.of(frontendUrl, "http://localhost:3000"));
 
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
 

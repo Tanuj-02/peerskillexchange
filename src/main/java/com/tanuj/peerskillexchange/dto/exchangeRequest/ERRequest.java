@@ -1,13 +1,13 @@
 package com.tanuj.peerskillexchange.dto.exchangeRequest;
 
-import com.tanuj.peerskillexchange.enums.RequestStatus;
-import com.tanuj.peerskillexchange.model.User;
+import jakarta.validation.constraints.NotBlank;
+
+import java.util.List;
 
 public record ERRequest(
-        User sender,
-        User receiver,
+        @NotBlank String receiverId,
         String message,
-        String canTeach,
-        String wantToLearn
+        List<String> canTeach,
+        List<String> wantToLearn
 ) {
 }

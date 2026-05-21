@@ -28,6 +28,17 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(nullable = false)
+    private boolean emailVerified = false;
+
+    private String emailVerificationCode;
+
+    private LocalDateTime emailVerificationExpiry;
+
+    private String passwordChangeCode;
+
+    private LocalDateTime passwordChangeCodeExpiry;
+
     @Column(nullable = false, unique = true, columnDefinition = "VARCHAR(255) COLLATE utf8mb4_bin")
     private String username;
 

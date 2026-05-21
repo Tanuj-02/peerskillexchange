@@ -3,6 +3,7 @@ package com.tanuj.peerskillexchange.security.jwt;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -13,7 +14,8 @@ import java.util.HashMap;
 
 @Service
 public class jwtService {
-    private static final String secret = "MySecretKey02022005tmX45rosuperhitman";
+    @Value("${jwt.key}")
+    private String secret;
 
     public String generateToken(String username, String role) {
         return Jwts.builder()
