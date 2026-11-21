@@ -43,12 +43,11 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
 
-        if (jwtService.isExpired(token)) {
-            response.setStatusCode(HttpStatus.UNAUTHORIZED);
-            return false;
-        }
-
         try {
+            if (jwtService.isExpired(token)) {
+                response.setStatusCode(HttpStatus.UNAUTHORIZED);
+                return false;
+            }
             Claims claims = jwtService.verifyTokenandExtractClaims(token);
             String username = claims.getSubject();
             if (username == null || username.isBlank()) {

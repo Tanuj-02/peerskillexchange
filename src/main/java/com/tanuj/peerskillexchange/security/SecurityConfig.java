@@ -39,7 +39,7 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(
                         request -> request
-                                // 1. PUBLIC ENDPOINTS
+                                .requestMatchers("/health").permitAll()
                                 .requestMatchers("/api/auth/**").permitAll() // Covers login and register
                                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/skills").permitAll() // Publicly view skills
                                 .requestMatchers(

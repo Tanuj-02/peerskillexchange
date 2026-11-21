@@ -13,6 +13,7 @@ import com.tanuj.peerskillexchange.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
@@ -56,8 +57,20 @@ public class ChatService {
     private void assertConnected(User me, User other) {
         boolean ok = exchangeRequestRepository.existsConnectionBetween(me, other, RequestStatus.ACCEPTED);
         if (!ok) {
-            throw new IllegalArgumentException("Users are not connected yet (request not accepted).");
+            throw new AccessDeniedException("Users are not connected.");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public void assertConversationAccess(String username, Long conversationId) {
+        User me = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AccessDeniedException("Authentication required."));
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new AccessDeniedException("Conversation unavailable."));
+        boolean user1 = conversation.getUser1().getId().equals(me.getId());
+        boolean user2 = conversation.getUser2().getId().equals(me.getId());
+        if (!user1 && !user2) throw new AccessDeniedException("Conversation unavailable.");
+        assertConnected(me, user1 ? conversation.getUser2() : conversation.getUser1());
     }
 
     @Transactional
@@ -117,12 +130,13 @@ public class ChatService {
 
         boolean isMember = conversation.getUser1().getId().equals(sender.getId()) || conversation.getUser2().getId().equals(sender.getId());
         if (!isMember) {
-            throw new IllegalArgumentException("Unauthorized to send message in this conversation.");
+            throw new AccessDeniedException("Unauthorized to send message in this conversation.");
         }
 
         User receiver = conversation.getUser1().getId().equals(sender.getId())
                 ? conversation.getUser2()
                 : conversation.getUser1();
+        assertConnected(sender, receiver);
 
         ChatMessage msg = new ChatMessage();
         msg.setConversation(conversation);
@@ -166,8 +180,11 @@ public class ChatService {
 
         boolean isMember = conversation.getUser1().getId().equals(me.getId()) || conversation.getUser2().getId().equals(me.getId());
         if (!isMember) {
-            throw new IllegalArgumentException("Unauthorized to view this conversation.");
+            throw new AccessDeniedException("Unauthorized to view this conversation.");
         }
+        User other = conversation.getUser1().getId().equals(me.getId())
+                ? conversation.getUser2() : conversation.getUser1();
+        assertConnected(me, other);
 
         return chatMessageRepository.findByConversation(conversation, pageable)
                 .map(m -> {

@@ -47,27 +47,31 @@ public class ExchangeRequestService {
         this.notificationService = notificationService;
     }
 
+    @Transactional
     public ERResponse createExchangeRequest(ERRequest erRequest) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User sender = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
 
         User receiver = userRepository.findById(erRequest.receiverId())
-                .orElseThrow(() -> new RuntimeException("Receiver not found"));
+                .orElseThrow(() -> new java.util.NoSuchElementException("Receiver not found"));
 
         if (sender.getId().equals(receiver.getId())) {
-            throw new RuntimeException("You cannot send an exchange request to yourself");
+            throw new IllegalArgumentException("You cannot send an exchange request to yourself");
         }
+
+        // Lock both users in a stable order so simultaneous requests in either direction
+        // cannot both pass the active-request checks.
+        String first = sender.getId().compareTo(receiver.getId()) < 0 ? sender.getId() : receiver.getId();
+        String second = sender.getId().compareTo(receiver.getId()) < 0 ? receiver.getId() : sender.getId();
+        userRepository.lockById(first).orElseThrow(() -> new IllegalArgumentException("User not found."));
+        userRepository.lockById(second).orElseThrow(() -> new IllegalArgumentException("User not found."));
 
         if (exchangeRequestRepository.existsConnectionBetween(sender, receiver, RequestStatus.ACCEPTED)) {
-            throw new RuntimeException("You are already connected with this user");
-        }
-
-        if (exchangeRequestRepository.existsConnectionBetween(sender, receiver, RequestStatus.REJECTED)) {
-            throw new RuntimeException("A request between these users was already rejected");
+            throw new IllegalStateException("You are already connected with this user");
         }
 
         if (exchangeRequestRepository.existsConnectionBetween(sender, receiver, RequestStatus.PENDING)) {
-            throw new RuntimeException("A pending request already exists between these users");
+            throw new IllegalStateException("A pending request already exists between these users");
         }
 
         ExchangeRequest exchangeRequest = new ExchangeRequest();
@@ -153,10 +157,9 @@ public class ExchangeRequestService {
             throw new IllegalArgumentException("Users are not connected.");
         }
 
-        // Remove accepted connection(s)
+
         exchangeRequestRepository.deleteAll(connections);
 
-        // Remove conversation + messages (so chat disappears)
         User u1 = isBefore(me, other) ? me : other;
         User u2 = isBefore(me, other) ? other : me;
         Optional<Conversation> conv = conversationRepository.findByUser1AndUser2(u1, u2);

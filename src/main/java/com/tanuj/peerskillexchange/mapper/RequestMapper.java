@@ -11,8 +11,8 @@ public class RequestMapper {
     public static ERResponse toERResponse(ExchangeRequest exchangeRequest) {
         return new ERResponse(
                 exchangeRequest.getId(),
-                UserMapper.toUserResponse(exchangeRequest.getSender()),
-                UserMapper.toUserResponse(exchangeRequest.getReceiver()),
+                UserMapper.toPublicUserResponse(exchangeRequest.getSender()),
+                UserMapper.toPublicUserResponse(exchangeRequest.getReceiver()),
                 exchangeRequest.getMessage(),
                 exchangeRequest.getStatus().name(),
                 skillNames(exchangeRequest.getOfferedSkills()),

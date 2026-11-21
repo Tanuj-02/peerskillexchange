@@ -4,6 +4,8 @@ import com.tanuj.peerskillexchange.dto.exchangeRequest.ERRequest;
 import com.tanuj.peerskillexchange.dto.exchangeRequest.ERResponse;
 import com.tanuj.peerskillexchange.service.ExchangeRequestService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,7 +29,15 @@ public class ExchangeRequestController {
 
     @PostMapping("/create")
     public ERResponse createExchangeRequest(@Valid @RequestBody ERRequest erRequest) {
-        return exchangeRequestService.createExchangeRequest(erRequest);
+        try {
+            return exchangeRequestService.createExchangeRequest(erRequest);
+        } catch (java.util.NoSuchElementException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
 
     @GetMapping("/me/sent")

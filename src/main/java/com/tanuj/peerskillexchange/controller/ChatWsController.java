@@ -48,7 +48,7 @@ public class ChatWsController {
     @MessageExceptionHandler
     public void handleException(Throwable ex, Principal principal) {
         if (principal == null || principal.getName() == null) return;
-        messagingTemplate.convertAndSendToUser(principal.getName(), "/queue/errors", ex.getMessage());
+        messagingTemplate.convertAndSendToUser(principal.getName(), "/queue/errors", "Message could not be processed.");
     }
 }
 

@@ -13,6 +13,14 @@ import java.util.List;
 
 public class UserMapper {
     public static UserResponse toUserResponse(User user){
+        return toUserResponse(user, true);
+    }
+
+    public static UserResponse toPublicUserResponse(User user) {
+        return toUserResponse(user, false);
+    }
+
+    private static UserResponse toUserResponse(User user, boolean owner) {
 
         List<String> canTeach = new ArrayList<>();
         List<String> wantsToLearn = new ArrayList<>();
@@ -42,16 +50,19 @@ public class UserMapper {
                 user.getBio(),
                 user.getCollege(),
                 user.getProfilePicture(),
-                user.getEmail(),
-                user.getRole().name(),
+                owner ? user.getEmail() : null,
+                owner ? user.getRole().name() : null,
                 skillDto
         );
     }
 
     public static void toUser(UserRequest userRequest, User user){
-        user.setName(userRequest.name());
-        user.setUsername(userRequest.username());
-        user.setEmail(userRequest.email());
+        if (userRequest.name() != null) {
+            if (userRequest.name().isBlank()) {
+                throw new IllegalArgumentException("Name cannot be blank.");
+            }
+            user.setName(userRequest.name().trim());
+        }
         user.setProfilePicture(userRequest.profilePicture());
         user.setBio(userRequest.bio());
         user.setCollege(userRequest.college());

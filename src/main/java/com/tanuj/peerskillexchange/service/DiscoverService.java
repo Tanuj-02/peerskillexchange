@@ -32,7 +32,7 @@ public class DiscoverService {
                 pageable
         );
 
-        return userSkillPageLoader.loadPage(idPage, pageable).map(UserMapper::toUserResponse);
+        return userSkillPageLoader.loadPage(idPage, pageable).map(UserMapper::toPublicUserResponse);
     }
 }
 

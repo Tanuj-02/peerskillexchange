@@ -1,6 +1,9 @@
 package com.tanuj.peerskillexchange.controller;
 
 import com.tanuj.peerskillexchange.dto.user.UserRequest;
+import com.tanuj.peerskillexchange.dto.user.PasswordChangeRequest;
+import com.tanuj.peerskillexchange.dto.user.EmailChangeRequest;
+import com.tanuj.peerskillexchange.dto.user.EmailChangeVerificationRequest;
 import com.tanuj.peerskillexchange.dto.user.UserResponse;
 import com.tanuj.peerskillexchange.service.UserService;
 import org.springframework.data.domain.Page;
@@ -10,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/users")
@@ -50,21 +54,47 @@ public class UserController {
     }
 
     @PutMapping("/me/password")
-    public String updatePassword(
-            @RequestParam String oldPassword,
-            @RequestParam String newPassword,
-            @RequestParam String verificationCode
-    ) {
+    public String updatePassword(@Valid @RequestBody PasswordChangeRequest request) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        userService.updatePassword(username, oldPassword, newPassword, verificationCode);
+        try {
+            userService.updatePassword(username, request.oldPassword(), request.newPassword(), request.verificationCode());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
         return "Password updated successfully";
     }
 
     @PostMapping("/me/password/send-verification")
     public String sendPasswordVerification() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        userService.sendPasswordChangeVerificationCode(username);
+        try {
+            userService.sendPasswordChangeVerificationCode(username);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
         return "Verification code sent to your email";
+    }
+
+    @PostMapping("/me/email-change")
+    public String requestEmailChange(@Valid @RequestBody EmailChangeRequest request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        try {
+            userService.requestEmailChange(username, request.email());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+        return "Verification code sent to the new email address";
+    }
+
+    @PostMapping("/me/email-change/verify")
+    public String verifyEmailChange(@Valid @RequestBody EmailChangeVerificationRequest request) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        try {
+            userService.verifyEmailChange(username, request.code());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+        return "Email address updated";
     }
 
     @GetMapping("/search")

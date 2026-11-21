@@ -35,9 +35,23 @@ public class User {
 
     private LocalDateTime emailVerificationExpiry;
 
+    private String pendingEmail;
+
+    private String pendingEmailCodeHash;
+
+    private LocalDateTime pendingEmailExpiry;
+
+    private LocalDateTime pendingEmailSentAt;
+
+    private int pendingEmailAttempts;
+
     private String passwordChangeCode;
 
     private LocalDateTime passwordChangeCodeExpiry;
+
+    private LocalDateTime passwordChangeCodeSentAt;
+
+    private int passwordChangeAttempts;
 
     @Column(nullable = false, unique = true, columnDefinition = "VARCHAR(255) COLLATE utf8mb4_bin")
     private String username;
