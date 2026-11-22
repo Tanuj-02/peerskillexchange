@@ -1,0 +1,17 @@
+services:
+  kafka:
+    image: apache/kafka:4.1.2
+    ports:
+      - "127.0.0.1:9092:9092"
+    volumes:
+      - kafka_board_data:/var/lib/kafka/data
+  redis:
+    image: redis:8.2.11-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_board_data:/data
+
+volumes:
+  kafka_board_data:
+  redis_board_data:

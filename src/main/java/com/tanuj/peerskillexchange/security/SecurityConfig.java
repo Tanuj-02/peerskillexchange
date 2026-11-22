@@ -51,6 +51,8 @@ public class SecurityConfig {
                                         "/ws"
                                 ).permitAll()
 
+                                .requestMatchers("/actuator/**").hasAnyAuthority("ADMIN", "ROLE_ADMIN")
+
                                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/users").hasAnyAuthority("ADMIN", "ROLE_ADMIN", "USER", "ROLE_USER")
                                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/skills").hasAnyAuthority("ADMIN", "ROLE_ADMIN")
 
