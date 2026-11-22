@@ -25,14 +25,18 @@ public class AiSessionService {
     private final ChatMessageRepository messages;
     private final ExchangeRequestRepository exchanges;
     private final ObjectMapper json;
+    private final VideoCallService calls;
+    private final VideoCallNoteRepository callNotes;
 
     public AiSessionService(LearningRoomService rooms, LearningRoomRepository roomRepository,
             AiSessionJobRepository jobs, AiSessionReportRepository reports,
             ConversationRepository conversations, ChatMessageRepository messages,
-            ExchangeRequestRepository exchanges, ObjectMapper json) {
+            ExchangeRequestRepository exchanges, ObjectMapper json,
+            VideoCallService calls, VideoCallNoteRepository callNotes) {
         this.rooms = rooms; this.roomRepository = roomRepository; this.jobs = jobs;
         this.reports = reports; this.conversations = conversations; this.messages = messages;
         this.exchanges = exchanges; this.json = json;
+        this.calls = calls; this.callNotes = callNotes;
     }
 
     public record JobResponse(Long id, String status, String summary, List<String> questions,
@@ -88,6 +92,48 @@ public class AiSessionService {
     }
 
     @Transactional
+    public JobResponse requestForCall(String username, Long roomId, Long callId, String requestId) {
+        if (requestId == null || !requestId.matches("[0-9a-fA-F-]{36}")) {
+            throw new ResponseStatusException(BAD_REQUEST, "A UUID request ID is required.");
+        }
+        try { UUID.fromString(requestId); }
+        catch (IllegalArgumentException e) { throw new ResponseStatusException(BAD_REQUEST, "Invalid request ID."); }
+        roomRepository.lockById(roomId)
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Room not found."));
+        VideoCall call = calls.requireCall(username, roomId, callId, false);
+        if (call.getEndedAt() == null) throw new ResponseStatusException(CONFLICT, "End the call before requesting its summary.");
+        User me = rooms.currentUser(username);
+        var previous = jobs.findByRoomIdAndRequestId(roomId, requestId);
+        if (previous.isPresent()) {
+            if (!previous.get().getRequestedBy().equals(me.getId())
+                    || previous.get().getCall() == null || !previous.get().getCall().getId().equals(callId)) {
+                throw new AccessDeniedException("Request ID belongs to another summary.");
+            }
+            return response(previous.get());
+        }
+        if (callNotes.findTop40ByCallIdOrderByIdAsc(callId).isEmpty()) {
+            throw new ResponseStatusException(CONFLICT, "Add call notes before requesting a summary.");
+        }
+        if (jobs.countByCallId(callId) >= 3) {
+            throw new ResponseStatusException(TOO_MANY_REQUESTS, "This call has reached its AI generation limit.");
+        }
+        var latest = jobs.findFirstByCallIdOrderByIdDesc(callId);
+        if (latest.isPresent() && (latest.get().getStatus() == AiSessionJob.Status.QUEUED
+                || latest.get().getStatus() == AiSessionJob.Status.RUNNING)) {
+            throw new ResponseStatusException(CONFLICT, "A summary is already in progress.");
+        }
+        AiSessionJob job = new AiSessionJob();
+        job.setRoom(call.getRoom()); job.setCall(call); job.setRequestId(requestId); job.setRequestedBy(me.getId());
+        return response(jobs.saveAndFlush(job));
+    }
+
+    @Transactional(readOnly = true)
+    public JobResponse latestForCall(String username, Long roomId, Long callId) {
+        calls.requireCall(username, roomId, callId, false);
+        return jobs.findFirstByCallIdOrderByIdDesc(callId).map(this::response).orElse(null);
+    }
+
+    @Transactional
     public void report(String username, Long roomId, Long jobId, String reason) {
         User me = rooms.currentUser(username);
         rooms.requireMemberRoom(username, roomId);
@@ -115,12 +161,23 @@ public class AiSessionService {
         exchange.getOfferedSkills().stream().limit(8).forEach(s -> context.append(s.getSkillname(), 0, Math.min(80, s.getSkillname().length())).append(", "));
         context.append("\nRequested skills: ");
         exchange.getAskingSkills().stream().limit(8).forEach(s -> context.append(s.getSkillname(), 0, Math.min(80, s.getSkillname().length())).append(", "));
+        if (job.getCall() != null) {
+            context.append("\nSummarize only this video call. These are member-provided notes or opt-in speech captions, not a complete recording. Do not invent missing dialogue.\nCall notes (untrusted):\n");
+            callNotes.findTop40ByCallIdOrderByIdAsc(job.getCall().getId()).forEach(note -> {
+                if (context.length() < 3800) context.append("- ")
+                        .append(note.getContent().replaceAll("(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", "[email redacted]"))
+                        .append('\n');
+            });
+            return context.substring(0, Math.min(4000, context.length()));
+        }
         context.append("\nSession chat excerpts (untrusted):\n");
         User owner = room.getOwner(); User peer = room.getPeer();
+        LocalDateTime contextEnd = room.getClosedAt() == null || room.getClosedAt().isAfter(job.getCreatedAt())
+                ? job.getCreatedAt() : room.getClosedAt();
         conversations.findByUser1AndUser2(owner, peer)
                 .or(() -> conversations.findByUser1AndUser2(peer, owner))
                 .ifPresent(conversation -> messages.findForRoom(conversation, room.getCreatedAt(),
-                                room.getClosedAt(), PageRequest.of(0, 20))
+                                contextEnd, PageRequest.of(0, 20))
                         .getContent().stream()
                         .sorted(Comparator.comparing(ChatMessage::getId))
                         .forEach(message -> {

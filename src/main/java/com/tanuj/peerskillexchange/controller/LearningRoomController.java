@@ -63,6 +63,13 @@ public class LearningRoomController {
         return closed;
     }
 
+    @PostMapping("/{roomId}/reopen")
+    public RoomResponse reopen(@PathVariable Long roomId) {
+        RoomResponse reopened = rooms.reopen(username(), roomId);
+        messaging.convertAndSend("/topic/rooms/" + roomId, RoomEvent.reopened(reopened));
+        return reopened;
+    }
+
     @GetMapping("/{roomId}/operations")
     public BoardHistoryResponse history(@PathVariable Long roomId,
                                         @RequestParam(defaultValue = "0") long after) {

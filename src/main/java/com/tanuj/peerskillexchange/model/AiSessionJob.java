@@ -7,12 +7,15 @@ import java.time.LocalDateTime;
 
 @Entity
 @Getter @Setter
-@Table(uniqueConstraints = @UniqueConstraint(name = "uk_ai_job_request", columnNames = {"room_id", "request_id"}))
+@Table(uniqueConstraints = @UniqueConstraint(name = "uk_ai_job_request", columnNames = {"room_id", "request_id"}),
+       indexes = @Index(name = "idx_ai_job_call_id", columnList = "call_id,id"))
 public class AiSessionJob {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     @ManyToOne(optional = false) @JoinColumn(name = "room_id", nullable = false)
     private LearningRoom room;
+    @ManyToOne @JoinColumn(name = "call_id")
+    private VideoCall call;
     @Column(name = "request_id", nullable = false, length = 36)
     private String requestId;
     @Column(nullable = false)

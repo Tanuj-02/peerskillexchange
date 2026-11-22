@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
 
@@ -17,32 +18,44 @@ public class BoardPipelineService {
     private final BoardKafkaPublisher publisher;
     private final BoardOperationRepository operations;
     private final boolean kafkaEnabled;
+    private final BoardCompletionNotifier completions;
 
     public BoardPipelineService(BoardService board, BoardKafkaPublisher publisher,
                                 BoardOperationRepository operations,
-                                @Value("${board.kafka.enabled:true}") boolean kafkaEnabled) {
+                                @Value("${board.kafka.enabled:true}") boolean kafkaEnabled,
+                                BoardCompletionNotifier completions) {
         this.board = board;
         this.publisher = publisher;
         this.operations = operations;
         this.kafkaEnabled = kafkaEnabled;
+        this.completions = completions;
     }
 
     public BoardOperationResponse append(String username, Long roomId, BoardOperationRequest input) {
         if (!kafkaEnabled) return board.append(username, roomId, input);
-        var receipt = publisher.publish(username, roomId, input);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        while (System.nanoTime() < deadline) {
-            var applied = operations.findByRoomIdAndOperationId(roomId, receipt.operationId());
-            if (applied.isPresent()) return board.toResponse(applied.get());
-            try {
-                Thread.sleep(40);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
+        var completion = completions.register(roomId, input.operationId());
+        try {
+            var receipt = publisher.publish(username, roomId, input);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (System.nanoTime() < deadline) {
+                try {
+                    return completion.get(100, TimeUnit.MILLISECONDS);
+                } catch (TimeoutException ignored) {
+                    // A different service instance may own the Kafka consumer.
+                    var applied = operations.findByRoomIdAndOperationId(roomId, receipt.operationId());
+                    if (applied.isPresent()) return board.toResponse(applied.get());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (java.util.concurrent.ExecutionException e) {
+                    break;
+                }
             }
+            throw new ResponseStatusException(SERVICE_UNAVAILABLE,
+                    "Operation is durable but the board is still recovering. Retry with the same operation ID.");
+        } finally {
+            completions.remove(roomId, input.operationId(), completion);
         }
-        throw new ResponseStatusException(SERVICE_UNAVAILABLE,
-                "Operation is durable but the board is still recovering. Retry with the same operation ID.");
     }
 
     public boolean kafkaEnabled() { return kafkaEnabled; }

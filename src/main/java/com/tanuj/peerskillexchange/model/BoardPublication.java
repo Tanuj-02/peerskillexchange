@@ -20,7 +20,7 @@ public class BoardPublication {
     @Column(name = "operation_id", nullable = false, length = 36)
     private String operationId;
 
-    @Lob @Column(nullable = false)
+    @Lob @Column(nullable = false, columnDefinition = "TEXT")
     private String eventJson;
 
     @Column(nullable = false)

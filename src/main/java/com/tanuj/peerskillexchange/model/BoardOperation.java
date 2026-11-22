@@ -33,10 +33,10 @@ public class BoardOperation {
     @ManyToOne(optional = false) @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
-    @Enumerated(EnumType.STRING) @Column(nullable = false)
+    @Enumerated(EnumType.STRING) @Column(nullable = false, columnDefinition = "varchar(16)")
     private BoardOperationType type;
 
-    @Column(length = 16000)
+    @Column(columnDefinition = "TEXT")
     private String pointsJson;
 
     @Column(length = 9)
@@ -47,8 +47,14 @@ public class BoardOperation {
     @Column(length = 36)
     private String targetOperationId;
 
+    @Column(length = 16)
+    private String shape;
+
+    @Column(name = "board_text", columnDefinition = "TEXT")
+    private String text;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    public enum BoardOperationType { STROKE, ERASE, CLEAR }
+    public enum BoardOperationType { STROKE, SHAPE, TEXT, ERASE, CLEAR }
 }

@@ -19,7 +19,9 @@ public class BoardProjectionAssembler {
 
     public BoardOperationResponse toResponse(BoardOperation op) {
         List<Point> points = null;
-        if (op.getType() == BoardOperation.BoardOperationType.STROKE) {
+        if (op.getType() == BoardOperation.BoardOperationType.STROKE
+                || op.getType() == BoardOperation.BoardOperationType.SHAPE
+                || op.getType() == BoardOperation.BoardOperationType.TEXT) {
             try {
                 points = json.readValue(op.getPointsJson(), new TypeReference<>() {});
             } catch (JsonProcessingException e) {
@@ -29,7 +31,7 @@ public class BoardProjectionAssembler {
         return new BoardOperationResponse(op.getOperationId(), op.getRoom().getId(),
                 op.getSequenceNumber(), op.getAuthor().getId(), op.getAuthor().getName(),
                 op.getType().name(), points, op.getColor(), op.getWidth(),
-                op.getTargetOperationId(), op.getCreatedAt());
+                op.getTargetOperationId(), op.getCreatedAt(), op.getShape(), op.getText());
     }
 
     public List<BoardOperationResponse> visible(List<BoardOperationResponse> seed,
@@ -39,6 +41,7 @@ public class BoardProjectionAssembler {
         for (BoardOperationResponse operation : tail) {
             switch (operation.type()) {
                 case "STROKE" -> strokes.put(operation.operationId(), operation);
+                case "SHAPE", "TEXT" -> strokes.put(operation.operationId(), operation);
                 case "ERASE" -> strokes.remove(operation.targetOperationId());
                 case "CLEAR" -> strokes.clear();
                 default -> throw new IllegalStateException("Stored board operation has unknown type.");

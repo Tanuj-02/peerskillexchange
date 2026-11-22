@@ -8,6 +8,7 @@ import com.tanuj.peerskillexchange.model.User;
 import com.tanuj.peerskillexchange.repository.ExchangeRequestRepository;
 import com.tanuj.peerskillexchange.repository.LearningRoomRepository;
 import com.tanuj.peerskillexchange.repository.UserRepository;
+import com.tanuj.peerskillexchange.repository.VideoCallRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,12 +24,14 @@ public class LearningRoomService {
     private final LearningRoomRepository rooms;
     private final ExchangeRequestRepository exchanges;
     private final UserRepository users;
+    private final VideoCallRepository videoCalls;
 
     public LearningRoomService(LearningRoomRepository rooms, ExchangeRequestRepository exchanges,
-                               UserRepository users) {
+                               UserRepository users, VideoCallRepository videoCalls) {
         this.rooms = rooms;
         this.exchanges = exchanges;
         this.users = users;
+        this.videoCalls = videoCalls;
     }
 
     User currentUser(String username) {
@@ -146,6 +149,23 @@ public class LearningRoomService {
         if (room.getStatus() == LearningRoom.RoomStatus.CLOSED) return toResponse(room);
         room.setStatus(LearningRoom.RoomStatus.CLOSED);
         room.setClosedAt(LocalDateTime.now());
+        videoCalls.findFirstByRoomIdAndEndedAtIsNullOrderByStartedAtDesc(roomId)
+                .ifPresent(call -> call.setEndedAt(room.getClosedAt()));
+        return toResponse(rooms.save(room));
+    }
+
+    @Transactional
+    public RoomResponse reopen(String username, Long roomId) {
+        User me = currentUser(username);
+        LearningRoom room = rooms.lockById(roomId)
+                .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Room not found."));
+        assertMember(me, room);
+        if (!room.getOwner().getId().equals(me.getId())) {
+            throw new AccessDeniedException("Only the room owner can restart it.");
+        }
+        if (room.getStatus() == LearningRoom.RoomStatus.OPEN) return toResponse(room);
+        room.setStatus(LearningRoom.RoomStatus.OPEN);
+        room.setClosedAt(null);
         return toResponse(rooms.save(room));
     }
 

@@ -57,8 +57,11 @@ class ChatSubscriptionInterceptorTest {
         Principal alice = () -> "alice";
         interceptor.preSend(frame(StompCommand.SUBSCRIBE, "/topic/rooms/42", alice), null);
         interceptor.preSend(frame(StompCommand.SEND, "/app/rooms.cursor/42", alice), null);
-        verify(rooms, times(2)).assertAccess("alice", 42L);
+        interceptor.preSend(frame(StompCommand.SEND, "/app/rooms.signal/42", alice), null);
+        verify(rooms, times(3)).assertAccess("alice", 42L);
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
                 frame(StompCommand.SUBSCRIBE, "/topic/rooms/42/other", alice), null));
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(
+                frame(StompCommand.SEND, "/app/rooms.signal/42/other", alice), null));
     }
 }

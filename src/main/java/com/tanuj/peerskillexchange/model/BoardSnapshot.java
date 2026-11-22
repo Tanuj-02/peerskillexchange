@@ -23,7 +23,7 @@ public class BoardSnapshot {
     @Column(nullable = false)
     private long kafkaOffset;
 
-    @Lob @Column(nullable = false)
+    @Lob @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String strokesJson;
 
     @Column(nullable = false)

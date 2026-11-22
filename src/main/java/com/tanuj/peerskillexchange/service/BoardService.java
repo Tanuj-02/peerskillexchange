@@ -89,8 +89,12 @@ public class BoardService {
                                     BoardOperation.BoardOperationType type) {
         if (type != BoardOperation.BoardOperationType.ERASE) return;
         if (!operations.existsByRoomIdAndOperationIdAndType(roomId, input.targetOperationId(),
-                BoardOperation.BoardOperationType.STROKE)) {
-            throw new ResponseStatusException(BAD_REQUEST, "Stroke does not exist in this room.");
+                BoardOperation.BoardOperationType.STROKE)
+                && !operations.existsByRoomIdAndOperationIdAndType(roomId, input.targetOperationId(),
+                BoardOperation.BoardOperationType.SHAPE)
+                && !operations.existsByRoomIdAndOperationIdAndType(roomId, input.targetOperationId(),
+                BoardOperation.BoardOperationType.TEXT)) {
+            throw new ResponseStatusException(BAD_REQUEST, "Board item does not exist in this room.");
         }
         if (operations.existsByRoomIdAndTargetOperationIdAndType(roomId, input.targetOperationId(),
                 BoardOperation.BoardOperationType.ERASE)) {
@@ -140,7 +144,9 @@ public class BoardService {
         operation.setKafkaOffset(offset);
         operation.setAuthor(me);
         operation.setType(type);
-        if (type == BoardOperation.BoardOperationType.STROKE) {
+        if (type == BoardOperation.BoardOperationType.STROKE
+                || type == BoardOperation.BoardOperationType.SHAPE
+                || type == BoardOperation.BoardOperationType.TEXT) {
             try {
                 operation.setPointsJson(objectMapper.writeValueAsString(input.points()));
             } catch (JsonProcessingException e) {
@@ -148,6 +154,8 @@ public class BoardService {
             }
             operation.setColor(input.color());
             operation.setWidth(input.width());
+            operation.setShape(input.shape());
+            operation.setText(input.text());
         }
         if (type == BoardOperation.BoardOperationType.ERASE) {
             operation.setTargetOperationId(input.targetOperationId());
@@ -167,22 +175,34 @@ public class BoardService {
     }
 
     private void validatePayload(BoardOperation.BoardOperationType type, BoardOperationRequest input) {
-        if (type == BoardOperation.BoardOperationType.STROKE) {
-            if (input.points() == null || input.points().size() < 2 || input.points().size() > 256
+        if (type == BoardOperation.BoardOperationType.STROKE
+                || type == BoardOperation.BoardOperationType.SHAPE
+                || type == BoardOperation.BoardOperationType.TEXT) {
+            int expected = type == BoardOperation.BoardOperationType.TEXT ? 1 : 2;
+            if (input.points() == null || input.points().size() < expected
+                    || input.points().size() > (type == BoardOperation.BoardOperationType.STROKE ? 256 : expected)
                     || input.points().stream().anyMatch(p -> p == null || !Double.isFinite(p.x())
                     || !Double.isFinite(p.y()) || p.x() < 0 || p.x() > 1 || p.y() < 0 || p.y() > 1)
                     || input.color() == null || !input.color().matches("#[0-9a-fA-F]{6}")
                     || input.width() == null || input.width() < 1 || input.width() > 20
-                    || input.targetOperationId() != null) {
-                throw new ResponseStatusException(BAD_REQUEST, "Invalid stroke.");
+                    || input.targetOperationId() != null
+                    || (type == BoardOperation.BoardOperationType.STROKE && (input.shape() != null || input.text() != null))
+                    || (type == BoardOperation.BoardOperationType.SHAPE
+                        && (input.shape() == null || !java.util.Set.of("RECTANGLE", "ELLIPSE", "LINE", "ARROW").contains(input.shape())
+                        || input.text() != null))
+                    || (type == BoardOperation.BoardOperationType.TEXT
+                        && (input.shape() != null || input.text() == null || input.text().isBlank()
+                        || input.text().length() > 500))) {
+                throw new ResponseStatusException(BAD_REQUEST, "Invalid board item.");
             }
         } else if (type == BoardOperation.BoardOperationType.ERASE) {
             requireUuid(input.targetOperationId(), "targetOperationId");
-            if (input.points() != null || input.color() != null || input.width() != null) {
+            if (input.points() != null || input.color() != null || input.width() != null
+                    || input.shape() != null || input.text() != null) {
                 throw new ResponseStatusException(BAD_REQUEST, "Invalid erase operation.");
             }
         } else if (input.points() != null || input.color() != null || input.width() != null
-                || input.targetOperationId() != null) {
+                || input.targetOperationId() != null || input.shape() != null || input.text() != null) {
             throw new ResponseStatusException(BAD_REQUEST, "Invalid clear operation.");
         }
     }

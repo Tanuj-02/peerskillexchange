@@ -11,4 +11,7 @@ public record RoomEvent(String type, BoardOperationResponse operation,
     public static RoomEvent closed(RoomResponse room) {
         return new RoomEvent("ROOM_CLOSED", null, null, room);
     }
+    public static RoomEvent reopened(RoomResponse room) {
+        return new RoomEvent("ROOM_REOPENED", null, null, room);
+    }
 }

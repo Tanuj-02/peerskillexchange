@@ -20,13 +20,16 @@ public class BoardKafkaListener {
     private final ObjectMapper json;
     private final SimpMessagingTemplate messaging;
     private final MeterRegistry metrics;
+    private final BoardCompletionNotifier completions;
 
     public BoardKafkaListener(BoardService board, ObjectMapper json,
-                              SimpMessagingTemplate messaging, MeterRegistry metrics) {
+                              SimpMessagingTemplate messaging, MeterRegistry metrics,
+                              BoardCompletionNotifier completions) {
         this.board = board;
         this.json = json;
         this.messaging = messaging;
         this.metrics = metrics;
+        this.completions = completions;
     }
 
     @KafkaListener(topics = "${board.kafka.topic}", autoStartup = "${board.kafka.enabled:true}")
@@ -39,6 +42,7 @@ public class BoardKafkaListener {
         if (applied == null) {
             metrics.counter("board.kafka.consumer.duplicates").increment();
         } else {
+            completions.completed(event.roomId(), event.operationId(), applied);
             metrics.counter("board.kafka.consumer.applied").increment();
             messaging.convertAndSend("/topic/rooms/" + event.roomId(), RoomEvent.operation(applied));
         }

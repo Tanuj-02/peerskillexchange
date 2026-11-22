@@ -33,8 +33,10 @@ class LearningRoomIntegrationTest {
     @Autowired LearningRoomService rooms;
     @Autowired BoardService board;
     @Autowired BoardProjectionService projection;
+    @Autowired BoardSnapshotService snapshots;
     @Autowired LearningRoomRepository roomRepository;
     @Autowired AiSessionService ai;
+    @Autowired VideoCallService calls;
     @Autowired EntityManager entityManager;
 
     private ExchangeRequest exchange;
@@ -65,12 +67,40 @@ class LearningRoomIntegrationTest {
     @Test
     void memberCanJoinAndOnlyOwnerCanCloseOneRoomPerExchange() {
         var room = rooms.create("alice", exchange.getId());
+        var call = calls.start("alice", room.id());
         assertEquals(room.id(), rooms.create("bob", exchange.getId()).id());
         assertEquals(room.id(), rooms.join("bob", room.id()).id());
         assertThrows(AccessDeniedException.class, () -> rooms.join("carol", room.id()));
         assertThrows(AccessDeniedException.class, () -> rooms.close("bob", room.id()));
         assertEquals("CLOSED", rooms.close("alice", room.id()).status());
+        assertNotNull(calls.list("bob", room.id()).stream().filter(c -> c.id().equals(call.id())).findFirst().orElseThrow().endedAt());
         assertThrows(ResponseStatusException.class, () -> rooms.join("alice", room.id()));
+    }
+
+    @Test
+    void ownerCanRestartClosedRoomWithoutLosingBoardOrCallHistory() {
+        var room = rooms.create("alice", exchange.getId());
+        String operationId = UUID.randomUUID().toString();
+        board.append("alice", room.id(), new BoardOperationRequest(operationId, "STROKE",
+                List.of(new Point(0.1, 0.2), new Point(0.3, 0.4)), "#112233", 3, null));
+        var firstCall = calls.start("bob", room.id());
+        rooms.close("alice", room.id());
+        assertThrows(AccessDeniedException.class, () -> rooms.reopen("bob", room.id()));
+        assertThrows(AccessDeniedException.class, () -> rooms.reopen("carol", room.id()));
+        var restarted = rooms.reopen("alice", room.id());
+        assertEquals("OPEN", restarted.status());
+        assertNull(restarted.closedAt());
+        assertEquals(room.id(), restarted.id());
+        assertEquals(1, restarted.latestSequence());
+        assertEquals(operationId, board.history("bob", room.id(), 0).operations().get(0).operationId());
+        assertEquals(1, calls.list("alice", room.id()).size());
+        assertNotNull(calls.list("alice", room.id()).get(0).endedAt());
+        assertNotEquals(firstCall.id(), calls.start("alice", room.id()).id());
+        assertEquals(room.id(), rooms.reopen("alice", room.id()).id());
+        rooms.close("alice", room.id());
+        exchange.setStatus(RequestStatus.REJECTED);
+        exchanges.saveAndFlush(exchange);
+        assertThrows(AccessDeniedException.class, () -> rooms.reopen("alice", room.id()));
     }
 
     @Test
@@ -90,6 +120,52 @@ class LearningRoomIntegrationTest {
         assertEquals(2, history.latestSequence());
         assertEquals(List.of(new Point(0.1, 0.2), new Point(0.3, 0.4)), history.operations().get(0).points());
         assertEquals(1, board.history("alice", room.id(), 1).operations().size());
+    }
+
+    @Test
+    void shapesAndTextSurviveReloadAndCanBeErased() {
+        var room = rooms.create("alice", exchange.getId());
+        String shapeId = UUID.randomUUID().toString();
+        String textId = UUID.randomUUID().toString();
+        board.append("alice", room.id(), new BoardOperationRequest(shapeId, "SHAPE",
+                List.of(new Point(0.1, 0.1), new Point(0.5, 0.5)), "#112233", 3,
+                null, "RECTANGLE", null));
+        board.append("bob", room.id(), new BoardOperationRequest(textId, "TEXT",
+                List.of(new Point(0.2, 0.2)), "#112233", 3,
+                null, null, "Architecture"));
+        board.append("alice", room.id(), new BoardOperationRequest(UUID.randomUUID().toString(),
+                "ERASE", null, null, null, shapeId));
+        entityManager.flush(); entityManager.clear();
+        var items = snapshots.rebuild(roomRepository.findById(room.id()).orElseThrow());
+        assertEquals(1, items.size());
+        assertEquals("Architecture", items.get(0).text());
+        assertThrows(ResponseStatusException.class, () -> board.append("alice", room.id(),
+                new BoardOperationRequest(UUID.randomUUID().toString(), "SHAPE",
+                        List.of(new Point(0, 0), new Point(1, 1)), "#112233", 3,
+                        null, "SCRIPT", null)));
+    }
+
+    @Test
+    void videoCallsAreMemberOnlyAndAiJobsAreScopedToEndedCallsWithNotes() {
+        var room = rooms.create("alice", exchange.getId());
+        var call = calls.start("alice", room.id());
+        assertEquals(call.id(), calls.start("bob", room.id()).id());
+        assertThrows(AccessDeniedException.class, () -> calls.list("carol", room.id()));
+        assertThrows(ResponseStatusException.class, () -> ai.requestForCall("alice", room.id(), call.id(), UUID.randomUUID().toString()));
+        calls.addNote("bob", room.id(), call.id(), UUID.randomUUID().toString(), "We discussed REST API design.");
+        assertEquals(1, calls.notes("alice", room.id(), call.id()).size());
+        assertThrows(AccessDeniedException.class, () -> calls.addNote("carol", room.id(), call.id(),
+                UUID.randomUUID().toString(), "Not a member"));
+        calls.end("bob", room.id(), call.id());
+        assertThrows(ResponseStatusException.class, () -> calls.addNote("alice", room.id(), call.id(),
+                UUID.randomUUID().toString(), "Late note"));
+        String requestId = UUID.randomUUID().toString();
+        var job = ai.requestForCall("alice", room.id(), call.id(), requestId);
+        assertEquals(job.id(), ai.requestForCall("alice", room.id(), call.id(), requestId).id());
+        assertTrue(ai.context(job.id()).contains("REST API design"));
+        assertFalse(ai.context(job.id()).contains("Session chat excerpts"));
+        assertEquals(job.id(), ai.latestForCall("bob", room.id(), call.id()).id());
+        assertNotEquals(call.id(), calls.start("alice", room.id()).id());
     }
 
     @Test

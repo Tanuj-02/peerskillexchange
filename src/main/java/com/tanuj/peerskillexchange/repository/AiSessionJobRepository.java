@@ -12,6 +12,8 @@ import java.util.Optional;
 public interface AiSessionJobRepository extends JpaRepository<AiSessionJob, Long> {
     Optional<AiSessionJob> findByRoomIdAndRequestId(Long roomId, String requestId);
     Optional<AiSessionJob> findFirstByRoomIdOrderByIdDesc(Long roomId);
+    Optional<AiSessionJob> findFirstByCallIdOrderByIdDesc(Long callId);
+    long countByCallId(Long callId);
     long countByRoomId(Long roomId);
     List<AiSessionJob> findTop20ByStatusAndPublishedAtIsNullOrderByIdAsc(AiSessionJob.Status status);
     @Lock(LockModeType.PESSIMISTIC_WRITE)

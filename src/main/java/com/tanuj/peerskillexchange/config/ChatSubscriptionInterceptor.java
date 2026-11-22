@@ -38,6 +38,10 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
                 assertRoomDestination(principal.getName(), destination, "/app/rooms.cursor/");
                 return message;
             }
+            if (destination != null && destination.startsWith("/app/rooms.signal/")) {
+                assertRoomDestination(principal.getName(), destination, "/app/rooms.signal/");
+                return message;
+            }
             throw new AccessDeniedException("Destination denied.");
         } else if (destination != null && destination.startsWith("/topic/conversations/")) {
             String id = destination.substring("/topic/conversations/".length());
